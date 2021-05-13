@@ -1,4 +1,5 @@
 require 'httpclient'
+require 'date'
 
 class TelegramListener < Redmine::Hook::Listener
 
@@ -86,11 +87,12 @@ class TelegramListener < Redmine::Hook::Listener
     unless issue.tracker_id.to_s or issue.author_id.to_s
       speak msg, channel, attachment, token if issue.priority_id.to_i >= priority_id
     end
-
+    
   end
 
   def controller_issues_edit_after_save(context={})
     issue = context[:issue]
+    assigned_tid = telegramid_for_user issue.assigned_to
     journal = context[:journal]
     channel = channel_for_project issue.project
     token = token_for_project issue.project
@@ -99,11 +101,24 @@ class TelegramListener < Redmine::Hook::Listener
 
     return unless channel and Setting.plugin_redmine_telegram['post_updates'] == '1'
 
+    Rails.logger.info("TELEGRAM issue edit send to: #{assigned_tid}")
+    
     # we dont care about any privacy, right? if not - uncomment it:
     # return if issue.is_private?
     # return if journal.private_notes?
 
-    msg = "<b>[#{escape issue.project}]</b>\n<a href='#{object_url issue}'>#{escape issue}</a> #{mentions journal.notes if Setting.plugin_redmine_telegram['auto_mentions'] == '1'}\n<b>#{journal.user.to_s}</b> #{l(:field_updated_on)}"
+    msg = <<~EOS
+      <a href='#{object_url issue}'><b>[#{escape issue.project}]</b> #{escape issue}</a>
+      #{mentions journal.notes if Setting.plugin_redmine_telegram['auto_mentions'] == '1'}
+      <b>담당자 : </b>#{issue.assigned_to.name}
+      <b>상태 : </b>#{issue.status.name}
+      <b>우선순위 : </b>#{issue.priority.name}
+      <b>시작시간 : </b>#{issue.start_date.to_s}
+      <b>완료시간 : </b>#{issue.due_date.to_s}
+      
+      <b>#{journal.user.to_s}</b>#{l(:field_updated_on)}
+    EOS
+
 
     attachment = {}
     attachment[:text] = escape journal.notes if journal.notes
@@ -112,7 +127,9 @@ class TelegramListener < Redmine::Hook::Listener
     unless issue.tracker_id.to_s or journal.user_id.to_s
       speak msg, channel, attachment, token if issue.priority_id.to_i >= priority_id
     end
-
+    
+    speak msg, assigned_tid, attachment, token if assigned_tid.to_s
+    
   end
 
 private
@@ -135,6 +152,16 @@ private
         :protocol => Setting.protocol
       }))
     end
+  end
+
+  def telegramid_for_user(user)
+    return nil if user.blank?
+
+    cf = UserCustomField.find_by_name("Telegram ID")
+
+    return [
+        (user.custom_value_for(cf).value rescue nil),
+    ].find{|v| v.present?}
   end
 
   def token_for_project(proj)
