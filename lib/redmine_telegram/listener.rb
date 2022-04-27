@@ -51,6 +51,7 @@ class TelegramListener < Redmine::Hook::Listener
 
   def controller_issues_new_after_save(context={})
     issue = context[:issue]
+    assigned_tid = telegramid_for_user issue.assigned_to
     channel = channel_for_project issue.project
     token = token_for_project issue.project
     priority_id = 1
@@ -61,7 +62,19 @@ class TelegramListener < Redmine::Hook::Listener
     # we dont care about any privacy, right? if not - uncomment it:
     # return if issue.is_private?
 
-    msg = "<b>[#{escape issue.project}]</b>\n<a href='#{object_url issue}'>#{escape issue}</a> #{mentions issue.description if Setting.plugin_redmine_telegram['auto_mentions'] == '1'}\n<b>#{escape issue.author}</b> #{l(:field_created_on)}\n"
+    # msg = "<b>[#{escape issue.project}]</b>\n<a href='#{object_url issue}'>#{escape issue}</a> #{mentions issue.description if Setting.plugin_redmine_telegram['auto_mentions'] == '1'}\n<b>#{escape issue.author}</b> #{l(:field_created_on)}\n"
+
+    msg = <<~EOS
+      <a href='#{object_url issue}'><b>[#{escape issue.project}]</b> #{escape issue}</a>
+      #{mentions issue.description if Setting.plugin_redmine_telegram['auto_mentions'] == '1'}
+      <b>담당자 : </b>#{issue.assigned_to.name}
+      <b>상태 : </b>#{issue.status.name}
+      <b>우선순위 : </b>#{issue.priority.name}
+      <b>시작시간 : </b>#{issue.start_date.to_s}
+      <b>완료시간 : </b>#{issue.due_date.to_s}
+      
+      <b>#{issue.author.to_s}</b>#{l(:field_created_on)}
+    EOS
 
     attachment = {}
     attachment[:text] = escape issue.description if issue.description
@@ -87,6 +100,8 @@ class TelegramListener < Redmine::Hook::Listener
     unless issue.tracker_id.to_s or issue.author_id.to_s
       speak msg, channel, attachment, token if issue.priority_id.to_i >= priority_id
     end
+
+    speak msg, assigned_tid, attachment, token if assigned_tid.to_s
     
   end
 

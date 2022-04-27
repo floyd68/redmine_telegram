@@ -1,6 +1,6 @@
 require 'redmine'
 
-require_dependency 'redmine_telegram/listener'
+require File.expand_path('lib/redmine_telegram/listener', __dir__)
 
 Redmine::Plugin.register :redmine_telegram do
 	name 'Redmine Telegram'
