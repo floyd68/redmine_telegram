@@ -107,7 +107,6 @@ class TelegramListener < Redmine::Hook::Listener
 
   def controller_issues_edit_after_save(context={})
     issue = context[:issue]
-    assigned_tid = telegramid_for_user issue.assigned_to
     journal = context[:journal]
     channel = channel_for_project issue.project
     token = token_for_project issue.project
@@ -116,7 +115,6 @@ class TelegramListener < Redmine::Hook::Listener
 
     return unless channel and Setting.plugin_redmine_telegram['post_updates'] == '1'
 
-    Rails.logger.info("TELEGRAM issue edit send to: #{assigned_tid}")
     
     # we dont care about any privacy, right? if not - uncomment it:
     # return if issue.is_private?
@@ -143,7 +141,16 @@ class TelegramListener < Redmine::Hook::Listener
       speak msg, channel, attachment, token if issue.priority_id.to_i >= priority_id
     end
     
-    speak msg, assigned_tid, attachment, token if assigned_tid.to_s
+    users = journal.notified_users | journal.notified_watchers | journal.notified_mentions | journal.journalized.notified_mentions | [issue.assigned_to]
+    
+    users.select! do |user|
+      journal.notes? || jornal.visible_details(user).any?
+    end
+    users.each do |user|
+      user_tid = telegramid_for_user user
+      speak msg, user_tid, attachment, token if user_tid.to_s
+      Rails.logger.info("TELEGRAM issue edit send to: #{user_tid}")
+    end
     
   end
 
